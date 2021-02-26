@@ -139,7 +139,6 @@ class MainActivity : AppCompatActivity(), AutoPermissionsListener {
         peerList.layoutManager = LinearLayoutManager(this)
     }
 
-
     companion object {
         const val TAG = "##WifiDirect## MainActivity"
     }
