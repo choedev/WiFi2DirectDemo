@@ -1,20 +1,17 @@
 package com.theoopusone.wifi2directdemo.transfer
 
-
-import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.util.Log
 import androidx.core.app.JobIntentService
+import com.theoopusone.wifi2directdemo.rxWifiDirect.FileCopyType
 import java.io.FileNotFoundException
 import java.io.IOException
 import java.io.InputStream
-import java.io.OutputStream
-import java.lang.Exception
 import java.net.InetSocketAddress
 import java.net.Socket
 
-class FileTransferService: JobIntentService() {
+class FileTransferService: JobIntentService(), FileCopyType {
 
     override fun onHandleWork(intent: Intent) {
         Log.d(TAG, "onHandleWork!")
@@ -73,33 +70,8 @@ class FileTransferService: JobIntentService() {
         }
     }
 
-    private fun copyFile(inputStream: InputStream, outputStream: OutputStream): Boolean {
-        val buffer = ByteArray(1024)
-        var len: Int = 0
-        try {
-            while (true) {
-                len = inputStream.read(buffer)
-                if (len < 0) {
-                    break
-                }
-                outputStream.write(buffer, 0, len)
-            }
-            outputStream.close()
-            inputStream.close()
-
-        } catch (e: IOException) {
-            e.printStackTrace()
-            return false
-        }
-        return true
-    }
-
     companion object {
         const val TAG = "##WifiDirect## FileTransferService"
-
-        fun enqueueWork(context: Context, intent: Intent) {
-            enqueueWork(context, FileTransferService::class.java, 1, intent)
-        }
 
         const val SOCKET_TIMEOUT = 5000
         const val ACTION_SEND_FILE = "com.github.choedev.wifidirect.send_file"

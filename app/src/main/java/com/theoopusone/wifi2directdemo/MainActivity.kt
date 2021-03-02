@@ -1,6 +1,5 @@
 package com.theoopusone.wifi2directdemo
 
-import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.net.wifi.WpsInfo
@@ -15,21 +14,20 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import com.jakewharton.rxbinding4.view.clicks
 import com.pedro.library.AutoPermissions
 import com.pedro.library.AutoPermissionsListener
+import com.theoopusone.wifi2directdemo.rxWifiDirect.FileReceiverModel
 import com.theoopusone.wifi2directdemo.rxWifiDirect.RxWifiDirectModel
 import com.theoopusone.wifi2directdemo.transfer.FileTransferService
 import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers
 import io.reactivex.rxjava3.disposables.CompositeDisposable
 import io.reactivex.rxjava3.subjects.PublishSubject
 import kotlinx.android.synthetic.main.activity_main.*
-import kotlinx.coroutines.GlobalScope
-import kotlinx.coroutines.launch
-import org.jetbrains.anko.doAsync
-import java.io.*
-import java.net.ServerSocket
+import org.jetbrains.anko.longToast
+import java.io.File
 
 
 class MainActivity : AppCompatActivity(), AutoPermissionsListener {
-    private var wifiDirectModel = RxWifiDirectModel()
+    private val wifiDirectModel = RxWifiDirectModel()
+    private val fileReceiverModel = FileReceiverModel()
     private val disposeBag = CompositeDisposable()
 
     private val peerItemClickSubject = PublishSubject.create<WifiP2pDevice>()
@@ -41,12 +39,11 @@ class MainActivity : AppCompatActivity(), AutoPermissionsListener {
 
         initRecyclerView()
         initRxWifiDirect()
+        initRxFileReceiver()
 
-        getSendImagePath()
+        fileReceiverModel.startFileReceiveServer(applicationContext)
 
         AutoPermissions.loadAllPermissions(this, 1)
-
-        startFileServer(applicationContext)
     }
 
     override fun finish() {
@@ -164,12 +161,6 @@ class MainActivity : AppCompatActivity(), AutoPermissionsListener {
             .subscribe(  {
                 Log.d(TAG, "start send image")
 
-//                val intent = Intent()
-//                intent.action = Intent.ACTION_VIEW
-//                intent.setDataAndType(Uri.parse(getSendImagePath()), "image/*")
-//                intent.setFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-//                this.startActivity(intent)
-
                 val uri = Uri.parse(getSendImagePath())
                 Log.d(TAG, "send image uri: ${uri.toString()}")
                 val serviceIntent = Intent(this, FileTransferService::class.java)
@@ -181,8 +172,6 @@ class MainActivity : AppCompatActivity(), AutoPermissionsListener {
                 Log.d(TAG, "send image address: $address")
                 serviceIntent.putExtra(FileTransferService.EXTRAS_GROUP_OWNER_ADDRESS, address)
                 serviceIntent.putExtra(FileTransferService.EXTRAS_OWNER_PORT, 8988)
-                //this.startService(intent)
-
                 JobIntentService.enqueueWork(this, FileTransferService::class.java, 0x500, serviceIntent)
 
 
@@ -194,73 +183,22 @@ class MainActivity : AppCompatActivity(), AutoPermissionsListener {
             }
     }
 
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-
-        Log.d(TAG, "start send image5")
-
-        val uri = Uri.parse(getSendImagePath())
-        val serviceIntent = Intent(this, FileTransferService::class.java)
-        serviceIntent.action = FileTransferService.ACTION_SEND_FILE
-        serviceIntent.putExtra(FileTransferService.EXTRAS_FILE_PATH, uri.toString())
-
-        val address =
-            wifiDirectModel.connectionDevicesSubject.value.last().groupOwnerAddress.hostAddress
-        serviceIntent.putExtra(FileTransferService.EXTRAS_GROUP_OWNER_ADDRESS, address)
-        serviceIntent.putExtra(FileTransferService.EXTRAS_OWNER_PORT, 8988)
-        this.startService(intent)
+    private fun initRxFileReceiver() {
+        fileReceiverModel.startFileReceiveServer(applicationContext)
+        fileReceiverModel.receiveCompleteSubject
+            .observeOn(AndroidSchedulers.mainThread())
+            .subscribe {
+                longToast("File Received")
+                fileReceiverModel.startFileReceiveServer(applicationContext)
+            }
+            .apply {
+                disposeBag.add(this)
+            }
     }
 
     private fun initRecyclerView() {
         peerList.adapter = peerAdapter
         peerList.layoutManager = LinearLayoutManager(this)
-    }
-
-    private fun startFileServer(context: Context) {
-        doAsync {
-            GlobalScope.launch {
-                Log.d(TAG, "start file server")
-
-                try {
-                    val serverSocket = ServerSocket(8988)
-                    val client = serverSocket.accept()
-                    val file = File(context.getExternalFilesDir("received"), "wifi2shared-${System.currentTimeMillis()}.png")
-                    val dir = File(file.parent)
-                    if (!dir.exists()) {
-                        dir.mkdir()
-                    }
-                    file.createNewFile()
-
-                    val inputStream = client.getInputStream()
-                    copyFile(inputStream, FileOutputStream(file))
-                    serverSocket.close()
-
-                } catch (e: IOException) {
-                    e.printStackTrace()
-                }
-            }
-        }
-    }
-
-    private fun copyFile(inputStream: InputStream, outputStream: OutputStream): Boolean {
-        val buffer = ByteArray(1024)
-        var len: Int = 0
-        try {
-            while (true) {
-                len = inputStream.read(buffer)
-                if (len < 0) {
-                    break
-                }
-                outputStream.write(buffer, 0, len)
-            }
-            outputStream.close()
-            inputStream.close()
-
-        } catch (e: IOException) {
-            e.printStackTrace()
-            return false
-        }
-        return true
     }
 
     companion object {
