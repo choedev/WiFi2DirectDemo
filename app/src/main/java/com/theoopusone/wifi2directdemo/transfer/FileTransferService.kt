@@ -3,8 +3,13 @@ package com.theoopusone.wifi2directdemo.transfer
 
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.util.Log
 import androidx.core.app.JobIntentService
+import java.io.FileNotFoundException
+import java.io.IOException
+import java.io.InputStream
+import java.io.OutputStream
 import java.lang.Exception
 import java.net.InetSocketAddress
 import java.net.Socket
@@ -12,7 +17,11 @@ import java.net.Socket
 class FileTransferService: JobIntentService() {
 
     override fun onHandleWork(intent: Intent) {
+        Log.d(TAG, "onHandleWork!")
+
+
         if (intent.action != ACTION_SEND_FILE) {
+            Log.e(TAG, "action error: ${intent.action}")
             return
         }
 
@@ -25,19 +34,64 @@ class FileTransferService: JobIntentService() {
             return
         }
 
-
         val socket = Socket()
         try {
+            Log.d(TAG, "Opening client socket - ")
+
             socket.bind(null)
             socket.connect(InetSocketAddress(host, port), SOCKET_TIMEOUT)
 
+            Log.d(TAG, "Client socket - ${socket.isConnected}")
+            val outputStream = socket.getOutputStream()
+            val contentResolver  = applicationContext.contentResolver
+            var inputStream: InputStream? = null
+            try {
+                inputStream = contentResolver.openInputStream(Uri.parse(fileUri))
+            } catch (e: FileNotFoundException) {
+                Log.e(TAG, "InputStream error: ${e.message}")
+                e.printStackTrace()
+            }
 
-        } catch (e: Exception) {
+            inputStream?.let {
+                copyFile(inputStream, outputStream)
+            }
+
+            Log.d(TAG, "Client data written")
+
+        } catch (e: IOException) {
+            Log.e(TAG, "Socket error: ${e.message}")
             e.printStackTrace()
 
         } finally {
-
+            if (socket.isConnected) {
+                try {
+                    socket.close()
+                } catch (e: IOException) {
+                    e.printStackTrace()
+                }
+            }
         }
+    }
+
+    private fun copyFile(inputStream: InputStream, outputStream: OutputStream): Boolean {
+        val buffer = ByteArray(1024)
+        var len: Int = 0
+        try {
+            while (true) {
+                len = inputStream.read(buffer)
+                if (len < 0) {
+                    break
+                }
+                outputStream.write(buffer, 0, len)
+            }
+            outputStream.close()
+            inputStream.close()
+
+        } catch (e: IOException) {
+            e.printStackTrace()
+            return false
+        }
+        return true
     }
 
     companion object {
